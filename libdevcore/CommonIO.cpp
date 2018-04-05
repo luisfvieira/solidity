@@ -167,3 +167,27 @@ int dev::readStandardInputChar()
 	DisableConsoleBuffering disableConsoleBuffering;
 	return cin.get();
 }
+
+boost::filesystem::path dev::weaklyCanonical(boost::filesystem::path const& _path)
+{
+#if BOOST_VERSION < 106000
+	if (boost::filesystem::exists(_path))
+		return boost::filesystem::canonical(_path);
+	else
+	{
+		boost::filesystem::path head(_path);
+		boost::filesystem::path tail;
+		for (auto it = --_path.end(); !head.empty(); --it)
+		{
+			if (boost::filesystem::exists(head))
+				break;
+			tail = (*it) / tail;
+			head.remove_filename();
+		}
+		head = boost::filesystem::canonical(head);
+		return head / tail;
+	}
+#else
+	return boost::filesystem::weakly_canonical(_path);
+#endif
+}
