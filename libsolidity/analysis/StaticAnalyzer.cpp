@@ -21,6 +21,7 @@
  */
 
 #include <libsolidity/analysis/StaticAnalyzer.h>
+#include <libsolidity/analysis/ConstantEvaluator.h>
 #include <libsolidity/ast/AST.h>
 #include <libsolidity/interface/ErrorReporter.h>
 #include <memory>
@@ -228,6 +229,42 @@ bool StaticAnalyzer::visit(InlineAssembly const& _inlineAssembly)
 		}
 	}
 
+	return true;
+}
+
+bool StaticAnalyzer::visit(BinaryOperation const& _operation)
+{
+	if (_operation.getOperator() == Token::Div && _operation.rightExpression().annotation().isConstant)
+		if (auto result = dynamic_pointer_cast<RationalNumberType const>(
+			ConstantEvaluator(m_errorReporter).evaluate(_operation.rightExpression())
+		))
+			if (result->literalValue(nullptr) == u256(0))
+				m_errorReporter.typeError(
+					_operation.location(),
+					"Division by zero."
+				);
+
+	return true;
+}
+
+bool StaticAnalyzer::visit(FunctionCall const& _functionCall)
+{
+	if (_functionCall.annotation().kind == FunctionCallKind::FunctionCall)
+	{
+		auto functionType = dynamic_pointer_cast<FunctionType const>(_functionCall.expression().annotation().type);
+		if (functionType->kind() == FunctionType::Kind::AddMod || functionType->kind() == FunctionType::Kind::MulMod)
+		{
+			solAssert(_functionCall.arguments().size() > 2, "");
+			if (auto result = dynamic_pointer_cast<RationalNumberType const>(
+				ConstantEvaluator(m_errorReporter).evaluate(*(_functionCall.arguments())[2])
+			))
+				if (result->literalValue(nullptr) == u256(0))
+					m_errorReporter.typeError(
+						_functionCall.location(),
+						"Arithmetic modulo zero."
+					);
+		}
+	}
 	return true;
 }
 
